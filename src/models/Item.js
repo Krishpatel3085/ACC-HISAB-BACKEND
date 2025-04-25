@@ -18,6 +18,18 @@ const PaymentSchema = new mongoose.Schema(
         ItemName: String,
         PurchasePriceAtSale: Number,  // Purchase Price at the time of sale
         ProfitLoss: Number,  // (Sale Price - Purchase Price) * Qty
+        Items: [
+            {
+                ItemName: String,
+                PurchasePrice: Number,
+                Quantity: Number,
+                PriceUnite: Number,
+                TaxRate: Number,
+                TaxAmount: Number,
+                Amount: Number,
+                RoundOff: Number,
+            }
+        ],
     },
     { timestamps: true }
 );

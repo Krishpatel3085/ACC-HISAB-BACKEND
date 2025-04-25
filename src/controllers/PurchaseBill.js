@@ -8,7 +8,7 @@ import mongoose from "mongoose";
 const CreatePurchaseBill = async (req, res) => {
     try {
         const data = req.body;
-      
+
         const companyCode = req.user.companyCode;
 
         const { PurchaseBill, GST, Parties, Cash, Cheques, BankAccount, Item } = await getCompanyModels(companyCode);
@@ -28,9 +28,9 @@ const CreatePurchaseBill = async (req, res) => {
             Balance = 0,
             Items = [],
             ChequeNumber,
-            Tax ,
+            Tax,
         } = data;
-       
+
 
         if (!PartyName || !PaymentType) {
             return res.status(400).json({ message: MESSAGES.ERROR.MISSING_FIELDS });
@@ -73,7 +73,7 @@ const CreatePurchaseBill = async (req, res) => {
         };
 
         const gst = await GST.findOne({ TaxName: Tax });
-    
+
         if (gst) {
             gst.Purchase.push(gstEntry);
             gst.markModified('Purchase');
@@ -169,6 +169,46 @@ const CreatePurchaseBill = async (req, res) => {
                 : [itemEntry];
 
             await existing.save();
+        }
+
+        // **Item inside add this entry**
+        for (const item of Items) {
+            const existingItem = await Item.findOne({ ItemName: item.ItemName });
+            if (!existingItem) return res.status(404).json({ message: `Item not found: ${item.ItemName}` });
+
+            const paymentEntry = {
+                InvoiceNo,
+                Total,
+                Balance,
+                PaymentType,
+                Type: "PurchaseBill",
+                PaidAmount,
+                PartyName,
+                Status,
+                Date,
+                TaxRate: totalTaxRate,
+                TaxAmount: totalTaxAmount,
+                Qty: item.Quantity,
+                Price: item.PurchasePrice,
+                ItemName: item.ItemName,
+                PurchasePriceAtSale: item.PurchasePrice,
+                ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                Items: [
+                    {
+                        ItemName: item.ItemName,
+                        PurchasePrice: item.PurchasePrice,
+                        Quantity: item.Quantity,
+                        PriceUnite: item.PriceUnite,
+                        TaxRate: item.TaxRate,
+                        TaxAmount: item.TaxAmount,
+                        Amount: item.Amount,
+                        RoundOff: item.RoundOff,
+                    }
+                ],
+            };
+
+            existingItem.Payment.push(paymentEntry);
+            await existingItem.save();
         }
 
         await purchaseBill.save();
@@ -349,24 +389,65 @@ const UpdatePurchaseBill = async (req, res) => {
         for (const item of Items) {
             const dbItem = await Item.findOne({ ItemName: item.ItemName });
             if (dbItem) {
-                dbItem.Quentity = Array.isArray(dbItem.Quentity)
-                    ? [...dbItem.Quentity, {
-                        Type: "PurchaseBill",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }]
-                    : [{
-                        Type: "PurchaseBill",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }];
+                if (!Array.isArray(dbItem.Quentity)) {
+                    dbItem.Quentity = [];
+                }
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "PurchaseBill" && q.InvoiceNo === existingBill.InvoiceNo
+                );
+
+                const updatedEntry = {
+                    Type: "PurchaseBill",
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Qty: item.Quantity,
+                    Amount: Total,
+                    TaxAmount: totalTaxAmount,
+                };
+
+                if (existingEntryIndex !== -1) {
+                    dbItem.Quentity[existingEntryIndex] = updatedEntry;
+                } else {
+                    dbItem.Quentity.push(updatedEntry);
+                }
+
+                // === Update Item Payment Entries ===
+                const paymentEntry = {
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Total,
+                    Balance,
+                    PaymentType,
+                    Type: "PurchaseBill",
+                    PaidAmount,
+                    PartyName,
+                    Status,
+                    Date,
+                    TaxRate: totalTaxRate,
+                    TaxAmount: totalTaxAmount,
+                    Qty: item.Quantity,
+                    Price: item.PurchasePrice,
+                    ItemName: item.ItemName,
+                    PurchasePriceAtSale: item.PurchasePrice,
+                    ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                    Items: [
+                        {
+                            ItemName: item.ItemName,
+                            PurchasePrice: item.PurchasePrice,
+                            Quantity: item.Quantity,
+                            PriceUnite: item.PriceUnite,
+                            TaxRate: item.TaxRate,
+                            TaxAmount: item.TaxAmount,
+                            Amount: item.Amount,
+                            RoundOff: item.RoundOff,
+                        }
+                    ],
+                };
+
+                dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }
         }
+
 
         // Final PurchaseBill update
         existingBill.set({

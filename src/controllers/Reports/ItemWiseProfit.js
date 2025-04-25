@@ -1,10 +1,9 @@
 import mongoose from "mongoose";
 import ItemsSchema from "../../models/Item.js"; // Use your schema file
-import MESSAGES from "../../config/messages.js";
+
 
 export const getAllItemsNetProfitOrLoss = async (req, res) => {
   try {
-
     const companyCode = req.user["companyCode"];
 
     const companyDB = mongoose.connection.useDb(companyCode);
@@ -12,8 +11,9 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
 
     const allItems = await Item.find();
 
+
     if (!allItems.length) {
-      return res.status(404).json({ message: MESSAGES.ERROR.ITEM_NOT_FOUND });
+      return res.status(404).json({ message: "No items found" });
     }
 
     const itemProfits = allItems.map(item => {
@@ -33,31 +33,55 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
       let deficitCost = 0;
       let purchaseList = [];
 
-      // Step 1: Calculate total revenue and quantity sold
-      item.Payment.forEach(payment => {
-        if (["SaleInvoice"].includes(payment.Type)) {
-          const qty = payment.Qty || 0;
-          const price = payment.Price || 0;
+      // ➕ Extra Totals from Schema Keys
+      let SaleInvoiceAmount = 0;
+      let SaleReturnAmount = 0;
+      let PurchaseBillAmount = 0;
+      let PurchaseReturnAmount = 0;
+      let TaxReceivable = 0;
+      let TaxPayable = 0;
 
-          totalRevenue += qty * price;
-          totalSalesQty += qty;
+      item.Payment.forEach(payment => {
+        const {
+          Type,
+          Qty = 0,
+          Price = 0,
+          TaxAmount = 0,
+          PurchasePriceAtSale = 0,
+          Date
+        } = payment;
+
+        switch (Type) {
+          case "SaleInvoice":
+            SaleInvoiceAmount += Qty * Price;
+            totalRevenue += Qty * Price;
+            totalSalesQty += Qty;
+            TaxReceivable += TaxAmount;
+            break;
+    
+          case "SaleReturn":
+            SaleReturnAmount += Qty * Price;
+            break;
+
+          case "PurchaseBill":
+            PurchaseBillAmount += Qty * Price;
+            TaxPayable += TaxAmount;
+            purchaseList.push({ Qty, PurchasePrice: Price, Date });
+            break;
+
+          case "PurchaseReturn":
+            PurchaseReturnAmount += Qty * Price;
+            break;
+
+          case "Opening Stock":
+            purchaseList.push({ Qty, PurchasePrice: Price, Date });
+            break;
         }
       });
 
-      // Step 2: Create sorted FIFO purchase list
-      item.Payment.forEach(payment => {
-        if (["Opening Stock", "PurchaseBill"].includes(payment.Type)) {
-          purchaseList.push({
-            Qty: payment.Qty,
-            PurchasePrice: payment.Price,
-            Date: payment.Date
-          });
-        }
-      });
-
+      // FIFO Costing
       purchaseList.sort((a, b) => new Date(a.Date) - new Date(b.Date));
 
-      // Step 3: Match purchases to sales using FIFO
       remainingSalesQty = totalSalesQty;
       let totalWeightedPrice = 0;
       let totalWeightedQty = 0;
@@ -68,29 +92,28 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
 
         if (remainingSalesQty <= 0) break;
 
-        const usedQty = Math.min(remainingSalesQty, purchase.Qty);
-        const costAdded = usedQty * purchase.PurchasePrice;
+        let usedQty = Math.min(remainingSalesQty, purchase.Qty);
+        let costAdded = usedQty * purchase.PurchasePrice;
 
         totalCostFIFO += costAdded;
         remainingSalesQty -= usedQty;
         purchase.Qty -= usedQty;
       }
 
-      // Step 4: Handle deficit (sales without matching purchase)
+      // Deficit Cost Handling
       if (remainingSalesQty > 0) {
         let remainingQty = remainingSalesQty;
         let tempDeficitCost = 0;
 
         const salesPayments = item.Payment
-          .filter(payment => ["SaleInvoice"].includes(payment.Type))
+          .filter(p => ["SaleInvoice"].includes(p.Type))
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         for (const payment of salesPayments) {
           if (remainingQty <= 0) break;
 
-          const qtyDeficit = Math.min(remainingQty, payment.Qty || 0);
-          const salePrice = payment.Price || 0;
-          const cost = qtyDeficit * salePrice;
+          let qtyDeficit = Math.min(remainingQty, payment.Qty);
+          let cost = qtyDeficit * payment.Price;
 
           tempDeficitCost += cost;
           remainingQty -= qtyDeficit;
@@ -99,7 +122,6 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
         deficitCost = tempDeficitCost;
       }
 
-      // Step 5: Final Profit Calculation
       const actualSalesQty = totalSalesQty - remainingSalesQty;
       const weightedAvgSalePrice = actualSalesQty > 0 ? totalRevenue / actualSalesQty : 0;
       const weightedAvgPurchasePrice = totalWeightedQty > 0 ? totalWeightedPrice / totalWeightedQty : 0;
@@ -116,7 +138,15 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
         deficitCost: parseFloat(deficitCost.toFixed(2)),
         weightedAvgSalePrice: parseFloat(weightedAvgSalePrice.toFixed(2)),
         weightedAvgPurchasePrice: parseFloat(weightedAvgPurchasePrice.toFixed(2)),
-        netProfitPerUnit: parseFloat(netProfitPerUnit.toFixed(2))
+        netProfitPerUnit: parseFloat(netProfitPerUnit.toFixed(2)),
+
+        // Matched Schema Keys Totals
+        SaleInvoiceAmount: parseFloat(SaleInvoiceAmount.toFixed(2)),
+        SaleReturnAmount: parseFloat(SaleReturnAmount.toFixed(2)),
+        PurchaseBillAmount: parseFloat(PurchaseBillAmount.toFixed(2)),
+        PurchaseReturnAmount: parseFloat(PurchaseReturnAmount.toFixed(2)),
+        TaxReceivable: parseFloat(TaxReceivable.toFixed(2)),
+        TaxPayable: parseFloat(TaxPayable.toFixed(2))
       };
     });
 

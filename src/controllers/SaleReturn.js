@@ -168,6 +168,46 @@ const CreateSaleReturn = async (req, res) => {
             await existing.save();
         }
 
+        // **Item inside add this entry**
+        for (const item of Items) {
+            const existingItem = await Item.findOne({ ItemName: item.ItemName });
+            if (!existingItem) return res.status(404).json({ message: `Item not found: ${item.ItemName}` });
+
+            const paymentEntry = {
+                InvoiceNo,
+                Total,
+                Balance,
+                PaymentType,
+                Type: "SaleReturn",
+                PaidAmount,
+                PartyName,
+                Status,
+                Date,
+                TaxRate: totalTaxRate,
+                TaxAmount: totalTaxAmount,
+                Qty: item.Quantity,
+                Price: item.PurchasePrice,
+                ItemName: item.ItemName,
+                PurchasePriceAtSale: item.PurchasePrice,
+                ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                Items: [
+                    {
+                        ItemName: item.ItemName,
+                        PurchasePrice: item.PurchasePrice,
+                        Quantity: item.Quantity,
+                        PriceUnite: item.PriceUnite,
+                        TaxRate: item.TaxRate,
+                        TaxAmount: item.TaxAmount,
+                        Amount: item.Amount,
+                        RoundOff: item.RoundOff,
+                    }
+                ],
+            };
+
+            existingItem.Payment.push(paymentEntry);
+            await existingItem.save();
+        }
+
         await saleReturn.save();
         return res.status(201).json({ message: MESSAGES.SUCCESS.SALE_RETURN_CREATED, saleReturn });
 
@@ -346,21 +386,61 @@ const UpdateSaleIReturn = async (req, res) => {
         for (const item of Items) {
             const dbItem = await Item.findOne({ ItemName: item.ItemName });
             if (dbItem) {
-                dbItem.Quentity = Array.isArray(dbItem.Quentity)
-                    ? [...dbItem.Quentity, {
-                        Type: "SaleReturn",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }]
-                    : [{
-                        Type: "SaleReturn",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }];
+                if (!Array.isArray(dbItem.Quentity)) {
+                    dbItem.Quentity = [];
+                }
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "SaleReturn" && q.InvoiceNo === existingBill.InvoiceNo
+                );
+
+                const updatedEntry = {
+                    Type: "SaleReturn",
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Qty: item.Quantity,
+                    Amount: Total,
+                    TaxAmount: totalTaxAmount,
+                };
+
+                if (existingEntryIndex !== -1) {
+                    dbItem.Quentity[existingEntryIndex] = updatedEntry;
+                } else {
+                    dbItem.Quentity.push(updatedEntry);
+                }
+
+                // === Update Item Payment Entries ===
+                const paymentEntry = {
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Total,
+                    Balance,
+                    PaymentType,
+                    Type: "SaleReturn",
+                    PaidAmount,
+                    PartyName,
+                    Status,
+                    Date,
+                    TaxRate: totalTaxRate,
+                    TaxAmount: totalTaxAmount,
+                    Qty: item.Quantity,
+                    Price: item.PurchasePrice,
+                    ItemName: item.ItemName,
+                    PurchasePriceAtSale: item.PurchasePrice,
+                    ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                    Items: [
+                        {
+                            ItemName: item.ItemName,
+                            PurchasePrice: item.PurchasePrice,
+                            Quantity: item.Quantity,
+                            PriceUnite: item.PriceUnite,
+                            TaxRate: item.TaxRate,
+                            TaxAmount: item.TaxAmount,
+                            Amount: item.Amount,
+                            RoundOff: item.RoundOff,
+                        }
+                    ],
+                };
+
+                dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }
         }

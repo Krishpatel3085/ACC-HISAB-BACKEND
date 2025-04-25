@@ -27,7 +27,7 @@ const CreatePurchaseReturn = async (req, res) => {
             Balance = 0,
             Items = [],
             ChequeNumber,
-            Tax ,
+            Tax,
         } = data;
 
         if (!PartyName || !PaymentType) {
@@ -168,6 +168,46 @@ const CreatePurchaseReturn = async (req, res) => {
             await existing.save();
         }
 
+
+        // **Item inside add this entry**
+        for (const item of Items) {
+            const existingItem = await Item.findOne({ ItemName: item.ItemName });
+            if (!existingItem) return res.status(404).json({ message: `Item not found: ${item.ItemName}` });
+
+            const paymentEntry = {
+                InvoiceNo,
+                Total,
+                Balance,
+                PaymentType,
+                Type: "PurchaseReturn",
+                PaidAmount,
+                PartyName,
+                Status,
+                Date,
+                TaxRate: totalTaxRate,
+                TaxAmount: totalTaxAmount,
+                Qty: item.Quantity,
+                Price: item.PurchasePrice,
+                ItemName: item.ItemName,
+                PurchasePriceAtSale: item.PurchasePrice,
+                ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                Items: [
+                    {
+                        ItemName: item.ItemName,
+                        PurchasePrice: item.PurchasePrice,
+                        Quantity: item.Quantity,
+                        PriceUnite: item.PriceUnite,
+                        TaxRate: item.TaxRate,
+                        TaxAmount: item.TaxAmount,
+                        Amount: item.Amount,
+                        RoundOff: item.RoundOff,
+                    }
+                ],
+            };
+
+            existingItem.Payment.push(paymentEntry);
+            await existingItem.save();
+        }
         await purchaseReturn.save();
         return res.status(201).json({ message: MESSAGES.SUCCESS.PURCHASE_RETURN_CREATED, purchaseReturn });
 
@@ -342,29 +382,69 @@ const UpdatePurchaseReturn = async (req, res) => {
             await bank.save();
         }
 
-        // Update Inventory
+         // === Update Item Payment Entries ===
         for (const item of Items) {
             const dbItem = await Item.findOne({ ItemName: item.ItemName });
             if (dbItem) {
-                dbItem.Quentity = Array.isArray(dbItem.Quentity)
-                    ? [...dbItem.Quentity, {
-                        Type: "PurchaseReturn",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }]
-                    : [{
-                        Type: "PurchaseReturn",
-                        InvoiceNo: existingBill.InvoiceNo,
-                        Qty: item.Quantity,
-                        Amount: Total,
-                        TaxAmount: totalTaxAmount
-                    }];
+                if (!Array.isArray(dbItem.Quentity)) {
+                    dbItem.Quentity = [];
+                }
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "PurchaseReturn" && q.InvoiceNo === existingBill.InvoiceNo
+                );
+
+                const updatedEntry = {
+                    Type: "PurchaseReturn",
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Qty: item.Quantity,
+                    Amount: Total,
+                    TaxAmount: totalTaxAmount,
+                };
+
+                if (existingEntryIndex !== -1) {
+                    dbItem.Quentity[existingEntryIndex] = updatedEntry;
+                } else {
+                    dbItem.Quentity.push(updatedEntry);
+                }
+
+                // === Update Item Payment Entries ===
+                const paymentEntry = {
+                    InvoiceNo: existingBill.InvoiceNo,
+                    Total,
+                    Balance,
+                    PaymentType,
+                    Type: "PurchaseReturn",
+                    PaidAmount,
+                    PartyName,
+                    Status,
+                    Date,
+                    TaxRate: totalTaxRate,
+                    TaxAmount: totalTaxAmount,
+                    Qty: item.Quantity,
+                    Price: item.PurchasePrice,
+                    ItemName: item.ItemName,
+                    PurchasePriceAtSale: item.PurchasePrice,
+                    ProfitLoss: 0, // Set 0 for purchase, as profit/loss is only for sale
+                    Items: [
+                        {
+                            ItemName: item.ItemName,
+                            PurchasePrice: item.PurchasePrice,
+                            Quantity: item.Quantity,
+                            PriceUnite: item.PriceUnite,
+                            TaxRate: item.TaxRate,
+                            TaxAmount: item.TaxAmount,
+                            Amount: item.Amount,
+                            RoundOff: item.RoundOff,
+                        }
+                    ],
+                };
+
+                dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }
         }
-
+        
         // Final PurchaseReturn update
         existingBill.set({
             PartyName,
@@ -465,7 +545,7 @@ const DeletePurchaseReturns = async (req, res) => {
 const FindPurchaseReturn = async (req, res) => {
     try {
         const { id } = req.params;
-    
+
         const companyCode = req.user.companyCode;
 
         if (!companyCode) {
@@ -473,7 +553,7 @@ const FindPurchaseReturn = async (req, res) => {
         }
 
         // Validate if user exists in master DB
-        const userExists = await Master.exists({ companyCode:companyCode });
+        const userExists = await Master.exists({ companyCode: companyCode });
 
         if (!userExists) {
             return res.status(404).json({ error: "User not found" });
@@ -493,7 +573,7 @@ const FindPurchaseReturn = async (req, res) => {
 
         // Fetch Purchase Bill
         const purchaseReturn = await PurchaseReturn.findById(id);
-    
+
         if (!purchaseReturn) {
             return res.status(404).json({ error: "Purchase Return not found" });
         }
