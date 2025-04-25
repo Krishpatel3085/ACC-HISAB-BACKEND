@@ -114,7 +114,7 @@ const CreatePurchaseReturn = async (req, res) => {
                     cash = new Cash({
                         Adjustment: "Initial",
                         Amount: 0,
-                        AsOfDate: new Date(),
+                        AsOfDate: Date,
                         Description: "Cash account initialized",
                         Payment: [],
                     });
@@ -383,16 +383,15 @@ const UpdatePurchaseReturn = async (req, res) => {
         }
 
          // === Update Item Payment Entries ===
-        for (const item of Items) {
+         for (const item of Items) {
             const dbItem = await Item.findOne({ ItemName: item.ItemName });
             if (dbItem) {
                 if (!Array.isArray(dbItem.Quentity)) {
                     dbItem.Quentity = [];
                 }
 
-                const existingEntryIndex = dbItem.Quentity.findIndex(
-                    q => q.Type === "PurchaseReturn" && q.InvoiceNo === existingBill.InvoiceNo
-                );
+                // Remove old Payment entries for this PurchaseBill from the Payment array
+                dbItem.Payment = dbItem.Payment.filter(p => p.InvoiceNo !== existingBill.InvoiceNo);
 
                 const updatedEntry = {
                     Type: "PurchaseReturn",
@@ -401,6 +400,10 @@ const UpdatePurchaseReturn = async (req, res) => {
                     Amount: Total,
                     TaxAmount: totalTaxAmount,
                 };
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "PurchaseReturn" && q.InvoiceNo === existingBill.InvoiceNo
+                );
 
                 if (existingEntryIndex !== -1) {
                     dbItem.Quentity[existingEntryIndex] = updatedEntry;
@@ -440,6 +443,7 @@ const UpdatePurchaseReturn = async (req, res) => {
                     ],
                 };
 
+                // Push new payment entry after removing the old ones
                 dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }

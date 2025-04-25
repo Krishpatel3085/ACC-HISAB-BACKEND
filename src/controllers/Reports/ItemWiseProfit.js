@@ -47,30 +47,50 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
           Qty = 0,
           Price = 0,
           TaxAmount = 0,
-          PurchasePriceAtSale = 0,
+          Items = [],
           Date
         } = payment;
 
         switch (Type) {
           case "SaleInvoice":
-            SaleInvoiceAmount += Qty * Price;
-            totalRevenue += Qty * Price;
-            totalSalesQty += Qty;
             TaxReceivable += TaxAmount;
+            Items.forEach(itemEntry => {
+              if (itemEntry.ItemName === item.ItemName) {
+                const { Quantity, PriceUnite } = itemEntry;
+                totalRevenue += Quantity * PriceUnite;
+                totalSalesQty += Quantity;
+                SaleInvoiceAmount += Quantity * PriceUnite
+              }
+            });
             break;
-    
+
           case "SaleReturn":
-            SaleReturnAmount += Qty * Price;
+            Items.forEach(itemEntry => {
+              if (itemEntry.ItemName === item.ItemName) {
+                const { Quantity, PriceUnite } = itemEntry;
+                SaleReturnAmount += Quantity * PriceUnite
+              }
+            });
             break;
 
           case "PurchaseBill":
-            PurchaseBillAmount += Qty * Price;
             TaxPayable += TaxAmount;
             purchaseList.push({ Qty, PurchasePrice: Price, Date });
+            Items.forEach(itemEntry => {
+              if (itemEntry.ItemName === item.ItemName) {
+                const { Quantity, PriceUnite } = itemEntry;
+                PurchaseBillAmount += Quantity * PriceUnite
+              }
+            });
             break;
 
           case "PurchaseReturn":
-            PurchaseReturnAmount += Qty * Price;
+            Items.forEach(itemEntry => {
+              if (itemEntry.ItemName === item.ItemName) {
+                const { Quantity, PriceUnite } = itemEntry;
+                PurchaseReturnAmount += Quantity * PriceUnite
+              }
+            });
             break;
 
           case "Opening Stock":

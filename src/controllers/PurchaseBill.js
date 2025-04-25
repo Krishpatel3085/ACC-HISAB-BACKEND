@@ -386,6 +386,7 @@ const UpdatePurchaseBill = async (req, res) => {
         }
 
         // Update Inventory
+        
         for (const item of Items) {
             const dbItem = await Item.findOne({ ItemName: item.ItemName });
             if (dbItem) {
@@ -393,9 +394,8 @@ const UpdatePurchaseBill = async (req, res) => {
                     dbItem.Quentity = [];
                 }
 
-                const existingEntryIndex = dbItem.Quentity.findIndex(
-                    q => q.Type === "PurchaseBill" && q.InvoiceNo === existingBill.InvoiceNo
-                );
+                // Remove old Payment entries for this PurchaseBill from the Payment array
+                dbItem.Payment = dbItem.Payment.filter(p => p.InvoiceNo !== existingBill.InvoiceNo);
 
                 const updatedEntry = {
                     Type: "PurchaseBill",
@@ -404,6 +404,10 @@ const UpdatePurchaseBill = async (req, res) => {
                     Amount: Total,
                     TaxAmount: totalTaxAmount,
                 };
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "PurchaseBill" && q.InvoiceNo === existingBill.InvoiceNo
+                );
 
                 if (existingEntryIndex !== -1) {
                     dbItem.Quentity[existingEntryIndex] = updatedEntry;
@@ -443,10 +447,12 @@ const UpdatePurchaseBill = async (req, res) => {
                     ],
                 };
 
+                // Push new payment entry after removing the old ones
                 dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }
         }
+
 
 
         // Final PurchaseBill update

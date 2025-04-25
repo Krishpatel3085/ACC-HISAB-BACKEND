@@ -391,9 +391,8 @@ const UpdateSaleInvoice = async (req, res) => {
                     dbItem.Quentity = [];
                 }
 
-                const existingEntryIndex = dbItem.Quentity.findIndex(
-                    q => q.Type === "SaleInvoice" && q.InvoiceNo === existingBill.InvoiceNo
-                );
+                // Remove old Payment entries for this PurchaseBill from the Payment array
+                dbItem.Payment = dbItem.Payment.filter(p => p.InvoiceNo !== existingBill.InvoiceNo);
 
                 const updatedEntry = {
                     Type: "SaleInvoice",
@@ -402,6 +401,10 @@ const UpdateSaleInvoice = async (req, res) => {
                     Amount: Total,
                     TaxAmount: totalTaxAmount,
                 };
+
+                const existingEntryIndex = dbItem.Quentity.findIndex(
+                    q => q.Type === "SaleInvoice" && q.InvoiceNo === existingBill.InvoiceNo
+                );
 
                 if (existingEntryIndex !== -1) {
                     dbItem.Quentity[existingEntryIndex] = updatedEntry;
@@ -441,6 +444,7 @@ const UpdateSaleInvoice = async (req, res) => {
                     ],
                 };
 
+                // Push new payment entry after removing the old ones
                 dbItem.Payment.push(paymentEntry);
                 await dbItem.save();
             }
