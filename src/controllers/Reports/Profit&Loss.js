@@ -6,8 +6,8 @@ export const getProfitAndLoss = async (req, res) => {
         const {
             PaymentIn,
             SaleInvoice,
-            SaleOrder,
             Expense,
+            Item
         } = await getCompanyModels(companyCode);
 
         // 1. Income Section
@@ -27,76 +27,80 @@ export const getProfitAndLoss = async (req, res) => {
             });
         });
 
-        // 2. Expense Section - Item Cost
-        const allSales = [
-            ...saleInvoices.map(item => ({ ...item, Type: "SaleInvoice" })),
-            ...(await SaleOrder.find().lean()).map(item => ({ ...item, Type: "SaleOrder" })),
-        ];
+        // 2. Expense Section using Payments inside Item
+        const items = await Item.find().lean();
 
-        let totalCost = 0;
-        let totalSalesQty = 0;
         let totalPurchaseQty = 0;
         let totalPurchaseValue = 0;
+        let totalSalesQty = 0;
         let availableStockQty = 0;
-        let remainingNegativeQty = 0;
+
+        // 2.1 Loop through each item to accumulate purchases & sales
+        items.forEach((item) => {
+            const payments = item.Payment || []; // You named it `Payment` not `Payments`
+            payments.forEach((pay) => {
+                const qty = pay.Qty || 0;
+                const price = pay.Price || 0;
+                const type = pay.Type;
+
+                if (["Opening Stock", "PurchaseBill"].includes(type)) {
+                    totalPurchaseQty += qty;
+                    totalPurchaseValue += qty * price;
+                    availableStockQty += qty;
+                }
+
+                if (["SaleInvoice", "SaleOrder"].includes(type)) {
+                    totalSalesQty += qty;
+                }
+            });
+        });
+
+        // 2.2 Calculate Weighted Avg Price
+        const weightedPrice = totalPurchaseQty > 0 ? totalPurchaseValue / totalPurchaseQty : 0;
+
+        // 2.3 Cost of available stock sales
+        const usedStockQty = Math.min(totalSalesQty, availableStockQty);
+        let availableStockCost = usedStockQty * weightedPrice;
+
+        // 2.4 Cost for negative stock (fallback to sale prices)
+        let negativeStockQty = totalSalesQty - availableStockQty;
         let negativeStockCost = 0;
 
-        const payments = await Expense.find().lean();
-        const allPayments = [...payments];
+        if (negativeStockQty > 0) {
+            items.forEach((item) => {
+                const sales = (item.Payment || [])
+                    .filter(p => ["SaleInvoice", "SaleOrder"].includes(p.Type))
+                    .reverse();
 
-        // Collect stock from Opening Stock and Purchase Bills
-        allPayments.forEach((payment) => {
-            if (["Opening Stock", "PurchaseBill"].includes(payment.Type)) {
-                availableStockQty += payment.Qty || 0;
-                totalPurchaseQty += payment.Qty || 0;
-                totalPurchaseValue += (payment.Qty || 0) * (payment.Price || 0);
-            }
-        });
+                for (let sale of sales) {
+                    if (negativeStockQty <= 0) break;
 
-        // Collect Sale Qty
-        const salesInvoices = [];
-        allSales.forEach((sale) => {
-            totalSalesQty += sale.Qty || 0;
-            salesInvoices.push(sale);
-        });
+                    const saleQty = sale.Qty || 0;
+                    const salePrice = sale.Price || 0;
 
-        // Calculate Weighted Average Purchase Price
-        let weightedPurchasePrice = totalPurchaseQty > 0 ? totalPurchaseValue / totalPurchaseQty : 0;
-
-        let adjustedSalesQty = Math.min(totalSalesQty, availableStockQty);
-        let availableStockCost = adjustedSalesQty * weightedPurchasePrice;
-
-        remainingNegativeQty = totalSalesQty - availableStockQty;
-        if (remainingNegativeQty > 0) {
-            for (let i = salesInvoices.length - 1; i >= 0; i--) {
-                let invoice = salesInvoices[i];
-                let qty = invoice.Qty || 0;
-                if (remainingNegativeQty <= qty) {
-                    negativeStockCost += remainingNegativeQty * invoice.Price;
-                    break;
-                } else {
-                    negativeStockCost += qty * invoice.Price;
-                    remainingNegativeQty -= qty;
+                    const usedQty = Math.min(negativeStockQty, saleQty);
+                    negativeStockCost += usedQty * salePrice;
+                    negativeStockQty -= usedQty;
                 }
-            }
+            });
         }
 
-        totalCost = availableStockCost + negativeStockCost;
+        const totalItemCost = availableStockCost + negativeStockCost;
 
-        // 3. Expense Category Breakdown
+        // 3. Extra Expenses from Expense Collection
         const allExpenses = await Expense.find().lean();
-        const categoryWiseExpense = {};
-        let totalExpenseCategoryAmount = 0;
+        const expenseCategories = {};
+        let otherExpensesTotal = 0;
 
         allExpenses.forEach((exp) => {
-            if (!categoryWiseExpense[exp.CategoryName]) {
-                categoryWiseExpense[exp.CategoryName] = 0;
+            if (!expenseCategories[exp.CategoryName]) {
+                expenseCategories[exp.CategoryName] = 0;
             }
-            categoryWiseExpense[exp.CategoryName] += exp.Amount || 0;
-            totalExpenseCategoryAmount += exp.Amount || 0;
+            expenseCategories[exp.CategoryName] += exp.Amount || 0;
+            otherExpensesTotal += exp.Amount || 0;
         });
 
-        // Final Response
+        // 4. Final Response
         res.status(200).json({
             income: {
                 paymentIn: paymentInTotal,
@@ -104,13 +108,13 @@ export const getProfitAndLoss = async (req, res) => {
                 netIncome: paymentInTotal + saleInvoiceTotal,
             },
             expense: {
-                itemCost: totalCost,
-                expenseCategories: categoryWiseExpense,
-                netExpense: totalCost + totalExpenseCategoryAmount,
+                itemCost: totalItemCost,
+                expenseCategories,
+                netExpense: totalItemCost + otherExpensesTotal,
             },
         });
     } catch (error) {
-        console.error("Profit & Loss Calculation Error: ", error);
+        console.error("Profit & Loss Error: ", error);
         res.status(500).json({ message: "Internal Server Error", error });
     }
 };

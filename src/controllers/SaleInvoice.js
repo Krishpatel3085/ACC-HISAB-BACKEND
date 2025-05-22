@@ -114,7 +114,7 @@ const CreateSaleInvoice = async (req, res) => {
                     cash = new Cash({
                         Adjustment: "Initial",
                         Amount: 0,
-                        AsOfDate: new Date(),
+                        AsOfDate:Date,
                         Description: "Cash account initialized",
                         Payment: [],
                     });
