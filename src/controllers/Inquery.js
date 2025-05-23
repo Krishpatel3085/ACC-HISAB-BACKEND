@@ -1,4 +1,4 @@
-import Inquiry from "../Models/Inquery.js";
+import Inquiry from "../models/inquery.js";
 import Master from "../models/MasterDB.js";
 import axios from "axios";
 import jwt from "jsonwebtoken";
