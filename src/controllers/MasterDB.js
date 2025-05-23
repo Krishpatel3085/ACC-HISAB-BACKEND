@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import Master from "../models/MasterDB.js";
 import { sendEmail } from "../config/sendEmail.js";
-import Inquiry from "../models/inquery.js";
+import Inquiry from "../models/Inquery.js";
 import MESSAGES from "../config/messages.js";
 
 
