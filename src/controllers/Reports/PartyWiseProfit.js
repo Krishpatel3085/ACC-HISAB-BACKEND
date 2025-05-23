@@ -1,4 +1,4 @@
-import PartiesSchema from "../../models/Party.js"; 
+import PartiesSchema from "../../models/Party.js";
 import ItemsSchema from "../../models/Item.js";
 import mongoose from "mongoose";
 
@@ -50,13 +50,25 @@ export const getAllPartiesNetProfitOrLoss = async (req, res) => {
             const stockData = {};
 
             for (const item of itemsData) {
-                stockData[item.ItemName] = {
-                    totalPurchaseQty: item.OpeningStockQty || 0,
-                    totalPurchaseValue: (item.OpeningStockQty || 0) * (item.OpeningStockPrice || 0),
-                    totalSalesQty: 0,
-                    salesInvoices: []
-                };
+                for (const payment of item.Payment) {
+                    const itemName = payment.ItemName;
+                    const qty = payment.Qty || 0;
+                    const price = payment.Price || 0;
+
+                    if (!stockData[itemName]) {
+                        stockData[itemName] = {
+                            totalPurchaseQty: 0,
+                            totalPurchaseValue: 0,
+                            totalSalesQty: 0,
+                            salesInvoices: []
+                        };
+                    }
+
+                    stockData[itemName].totalPurchaseQty += qty;
+                    stockData[itemName].totalPurchaseValue += qty * price;
+                }
             }
+
 
             // Step 2: Loop through sale invoices
             for (const payment of saleInvoices) {
@@ -64,7 +76,6 @@ export const getAllPartiesNetProfitOrLoss = async (req, res) => {
 
                 for (const item of payment.Items || []) {
                     totalRevenue += (item.Quantity || 0) * (item.PriceUnite || 0);
-
                     if (!stockData[item.ItemName]) {
                         stockData[item.ItemName] = {
                             totalPurchaseQty: 0,
@@ -86,22 +97,40 @@ export const getAllPartiesNetProfitOrLoss = async (req, res) => {
             for (const itemName in stockData) {
                 const item = stockData[itemName];
 
-                let totalCostForItem = 0;
                 let availableStockQty = item.totalPurchaseQty;
-                let totalSalesQty = item.totalSalesQty;
+                let totalCostForItem = 0;
 
+                // Weighted average purchase price
                 const weightedPurchasePrice =
                     item.totalPurchaseQty > 0
                         ? item.totalPurchaseValue / item.totalPurchaseQty
                         : 0;
 
-                const adjustedSalesQty = Math.min(totalSalesQty, availableStockQty);
-                const availableStockCost = adjustedSalesQty * weightedPurchasePrice;
+                for (const sale of item.salesInvoices) {
+                    const qty = sale.qty;
+                    const salePrice = sale.price;
 
-                const remainingNegativeQty = totalSalesQty - availableStockQty;
-                const negativeStockCost = remainingNegativeQty > 0 ? 0 : 0; // adjust if needed
+                    if (availableStockQty >= qty) {
+                        // Enough stock available
+                        totalCostForItem += qty * weightedPurchasePrice;
+                        availableStockQty -= qty;
+                    } else {
+                        // Partial or no stock: split cost
+                        const availableQty = Math.max(availableStockQty, 0);
+                        const negativeQty = qty - availableQty;
 
-                totalCostForItem = availableStockCost + negativeStockCost;
+                        if (availableQty > 0) {
+                            totalCostForItem += availableQty * weightedPurchasePrice;
+                        }
+
+                        if (negativeQty > 0) {
+                            totalCostForItem += negativeQty * salePrice;
+                        }
+
+                        availableStockQty = 0;
+                    }
+                }
+
                 totalCost += totalCostForItem;
             }
 
