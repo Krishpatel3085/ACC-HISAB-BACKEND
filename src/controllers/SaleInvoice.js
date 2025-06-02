@@ -35,7 +35,7 @@ const CreateSaleInvoice = async (req, res) => {
         }
 
         const Status = Balance === 0 ? "Paid" : PaidAmount > 0 ? "Partial" : "Unpaid";
-        const InvoiceNo = `PB${Math.floor(10000 + Math.random() * 90000)}`;
+        const InvoiceNo = `SI${Math.floor(10000 + Math.random() * 90000)}`;
         const TranscationType = "SaleInvoice";
 
         // Create SaleInvoice instance
