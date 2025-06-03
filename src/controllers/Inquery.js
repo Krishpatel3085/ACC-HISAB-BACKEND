@@ -82,16 +82,37 @@ const createInquery = async (req, res) => {
 const otpStorage = new Map();
 
 // 🔹 Send OTP via WhatsApp API
+
+
 const sendOTP = async (mobile, otp) => {
-    try {
-        const apiUrl = `${process.env.WHATSAPP_API_URL}token=${process.env.WHATSAPP_TOKEN}&instance_id=${process.env.WHATSAPP_INSTANCE_ID}&jid=91${mobile}@s.whatsapp.net&msg=Your+OTP+is:+${otp}`;
-        const response = await axios.get(apiUrl);
-        return response.data;
-    } catch (error) {
-        console.error("Error sending OTP:", error.message);
-        return null;
-    }
+  try {
+    const apiUrl = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const response = await axios.post(
+      apiUrl,
+      {
+        messaging_product: "whatsapp",
+        to: `91${mobile}`,
+        type: "text",
+        text: {
+          body: `Your OTP is: ${otp}`,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error("Error sending OTP:", error.response?.data || error.message);
+    return null;
+  }
 };
+
 
 const requestOTPFor2FA = async (req, res) => {
     try {
@@ -297,7 +318,7 @@ const login = async (req, res) => {
         const token = jwt.sign(
             { id: user._id, UserName, companyCode },
             process.env.JWT_SECRET,
-            { expiresIn: "24h" }
+            { expiresIn: "365d" }
         );
 
         res.status(200).json({ message: "Login successful", token, UserName, companyCode, UserGroup });
