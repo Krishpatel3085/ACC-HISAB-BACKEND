@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import userSchema from "../models/User.js";
 import mongoose from "mongoose";
 import MESSAGES from "../config/messages.js";
+import twilio from 'twilio';
 
 dotenv.config();
 
@@ -85,33 +86,27 @@ const otpStorage = new Map();
 
 
 const sendOTP = async (mobile, otp) => {
-  try {
-    const apiUrl = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    try {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-    const response = await axios.post(
-      apiUrl,
-      {
-        messaging_product: "whatsapp",
-        to: `91${mobile}`,
-        type: "text",
-        text: {
-          body: `Your OTP is: ${otp}`,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+        const client = twilio(accountSid, authToken);
 
-    return response.data;
-  } catch (error) {
-    console.error("Error sending OTP:", error.response?.data || error.message);
-    return null;
-  }
+        const message = await client.messages.create({
+            from: 'whatsapp:+14155238886',
+            to: `whatsapp:+91${mobile}`,
+            body: `Your OTP is: ${otp}`,
+        });
+
+        console.log("OTP sent. SID:", message.sid);
+        return message.sid;
+
+    } catch (error) {
+        console.error("Error sending OTP:", error.response?.data || error.message);
+        return null;
+    }
 };
+
 
 
 const requestOTPFor2FA = async (req, res) => {
@@ -217,7 +212,7 @@ const verifyOTPAndEnable2FA = async (req, res) => {
 const requestOTP = async (req, res) => {
     try {
         const { companyCode, UserName, Pass } = req.body;
-  
+
 
 
         // Step 1: Check in Master Database
