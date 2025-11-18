@@ -31,6 +31,7 @@ import { OnlineOrder_router } from './routes/OnlineOrder.js';
 import { Dashboard_router } from './routes/Dashboard.js';
 import { WhatsApp_router } from './routes/WhatSappMessage.js';
 import { Reports_Router } from './routes/Reports.js';
+import { gmailRoutes } from './routes/gmailRoutes.js';
 
 dotenv.config();
 
@@ -70,7 +71,7 @@ app.use('/OnlineOrder', OnlineOrder_router);
 app.use('/Dashboard', Dashboard_router);
 app.use('/Whatsapp', WhatsApp_router);
 app.use('/Reports', Reports_Router);
-
+app.use("/api/google", gmailRoutes);
 // Email OTP FOR INQUIRY CREATE
 app.post('/send-otp', SendOtp)
 app.post('/verify-otp', VerifyOtp)
