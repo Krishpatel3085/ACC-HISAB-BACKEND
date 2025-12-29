@@ -40,7 +40,8 @@ const userCreate = async (req, res) => {
             UserGroup,
             MobileNumber,
             Password: hashedPassword,
-            Avatar
+            Avatar,
+            CompanyCode
         });
 
         await newUser.save();

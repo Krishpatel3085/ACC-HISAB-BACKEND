@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
     UserGroup: { type: String },
     MobileNumber: { type: String, required: true },
     Password: { type: String, required: true },
+    CompanyCode: { type: String, required: true },  
     Avatar: String,
 }, {
     timestamps: true,

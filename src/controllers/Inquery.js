@@ -10,7 +10,7 @@ import userSchema from "../models/User.js";
 import mongoose from "mongoose";
 import MESSAGES from "../config/messages.js";
 import twilio from 'twilio';
-
+import bcrypt from 'bcrypt';
 dotenv.config();
 
 const createInquery = async (req, res) => {
@@ -212,7 +212,7 @@ const verifyOTPAndEnable2FA = async (req, res) => {
 const requestOTP = async (req, res) => {
     try {
         const { companyCode, UserName, Pass } = req.body;
-
+        console.log("Chek", req.body)
 
 
         // Step 1: Check in Master Database
@@ -228,8 +228,11 @@ const requestOTP = async (req, res) => {
 
             if (!user) return res.status(401).json({ message: MESSAGES.ERROR.USERNAME_COMPANY_CODE_REQUIRED });
 
-            // Verify Password from UserSchema
-            if (user.Password !== Pass) return res.status(401).json({ message: MESSAGES.ERROR.PASSWORD_INCORRECT });
+            const isMatch = await bcrypt.compare(Pass, user.Password);
+
+            if (!isMatch) {
+                return res.status(401).json({ message: MESSAGES.ERROR.PASSWORD_INCORRECT });
+            }
 
             userMobile = user.MobileNumber;
             userEmail = user.Email;
@@ -280,7 +283,7 @@ const requestOTP = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { companyCode, UserName, otp } = req.body;
-
+        console.log("first", req.body)
         // Step 1: Check in Master Database
         let user = await Master.findOne({ companyCode, UserName });
         let userMobile;
@@ -326,26 +329,44 @@ const login = async (req, res) => {
 
 const otpStore = {};
 
-// Forgot Password (Send OTP)
 const forgetPassword = async (req, res) => {
     try {
         const { UserEmail, CompanyCode } = req.body;
+        console.log("Searching in Master for:", req.body);
 
-        const user = await Master.findOne({ UserEmail, companyCode: CompanyCode });
+        // 1. First, search in the Master collection
+        let user = await Master.findOne({ UserEmail, companyCode: CompanyCode });
 
+        // 2. If not found in Master, search in User collection
         if (!user) {
-            return res.status(404).json({ message: MESSAGES.ERROR.USERNAME_COMPANY_CODE_REQUIRED });
+            console.log("Not found in Master, searching in User collection...");
+            user = await userSchema.findOne({ UserEmail, companyCode: CompanyCode });
         }
 
+        // 3. If still not found in either, return error
+        if (!user) {
+            return res.status(404).json({ 
+                message: "User not found in any department. Please check your Email and Company Code." 
+            });
+        }
+
+        // 4. User found (either in Master or User), proceed with OTP logic
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = Date.now() + 10 * 60 * 1000;
 
+        // Store OTP (Assuming otpStore is an object defined outside)
         otpStore[UserEmail] = { otp, otpExpiry };
 
+        // Send Email
         await sendEmail(UserEmail, `Your OTP Code: ${otp}`);
 
-        res.status(200).json({ message: MESSAGES.SUCCESS.OTP_SENT_TO_EMAIL, step: "verify" });
+        res.status(200).json({ 
+            message: MESSAGES.SUCCESS.OTP_SENT_TO_EMAIL, 
+            step: "verify" 
+        });
+
     } catch (error) {
+        console.error("Forget Password Error:", error);
         res.status(500).json({ error: error.message });
     }
 };
