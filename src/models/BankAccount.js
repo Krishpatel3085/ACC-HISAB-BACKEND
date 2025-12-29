@@ -35,25 +35,22 @@ BankAccountSchema.virtual("TotalBalance").get(function () {
 // ✅ Virtual: Net Amount (Considering type of transaction)
 BankAccountSchema.virtual("Amount").get(function () {
     return (this.Payment || []).reduce((sum, p) => {
-        const total = p.Total || 0;
         const paid = p.PaidAmount || 0;
 
         switch (p.Type) {
             case "PurchaseBill":
             case "SaleReturn":
             case "PaymentOut":
-                sum -= total;
-                break;
+                return sum - paid; // પૈસા બેંકમાંથી ગયા
 
             case "PurchaseReturn":
             case "SaleInvoice":
             case "PaymentIn":
-                sum += total;
-                break;
+                return sum + paid; // પૈસા બેંકમાં આવ્યા
+            
+            default:
+                return sum;
         }
-
-        // Always add paid amount (i.e. money received or paid)
-        return sum + paid;
     }, 0);
 });
 

@@ -59,7 +59,7 @@ const createPaymentOut = async (req, res) => {
 
         party.Payment.push({
             InvoiceNo,
-            Total: 0,
+            Total: total,
             Balance: balance,
             PaymentType,
             Type: "PaymentOut",
@@ -204,7 +204,7 @@ const updatePaymentOut = async (req, res) => {
             // Push updated data
             party.Payment.push({
                 InvoiceNo: updatedPayment.InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType,
                 Type: "Payment-Out",
