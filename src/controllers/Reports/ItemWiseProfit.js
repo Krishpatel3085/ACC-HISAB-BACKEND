@@ -142,11 +142,18 @@ export const getAllItemsNetProfitOrLoss = async (req, res) => {
         deficitCost = tempDeficitCost;
       }
 
-      const actualSalesQty = totalSalesQty - remainingSalesQty;
+      // const actualSalesQty = totalSalesQty - remainingSalesQty;
+      const actualSalesQty = totalSalesQty;
       const weightedAvgSalePrice = actualSalesQty > 0 ? totalRevenue / actualSalesQty : 0;
       const weightedAvgPurchasePrice = totalWeightedQty > 0 ? totalWeightedPrice / totalWeightedQty : 0;
-      const netProfitPerUnit = weightedAvgSalePrice - weightedAvgPurchasePrice;
-      const totalNetProfit = netProfitPerUnit * actualSalesQty - deficitCost;
+
+      // const netProfitPerUnit = weightedAvgSalePrice - weightedAvgPurchasePrice;
+
+
+      const totalNetProfit = totalRevenue - totalCostFIFO - deficitCost;
+      const netProfitPerUnit = actualSalesQty > 0 ? totalNetProfit / actualSalesQty : 0;
+
+      // const totalNetProfit = netProfitPerUnit * actualSalesQty - deficitCost;
 
       return {
         itemId: item._id,

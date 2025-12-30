@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-// const { getCompanyDB } = require("../utils/dbHelper");
 import Master from "../models/MasterDB.js";
 import MESSAGES from "../config/messages.js";
 import ItemsSchema from "../models/Item.js";
+import GSTSchema from "../models/GST.js";
 
 
 const getCompanyDB = async (companyCode) => {
@@ -13,8 +13,9 @@ const getCompanyDB = async (companyCode) => {
 
     const companyDB = mongoose.connection.useDb(companyCode);
     const ItemModel = companyDB.models.Item || companyDB.model("Items", ItemsSchema);
+    const GSTModel = companyDB.models.GST || companyDB.model("GST", GSTSchema);
 
-    return ItemModel;
+    return { ItemModel, GSTModel };
 };
 
 const createItem = async (req, res) => {
@@ -25,10 +26,11 @@ const createItem = async (req, res) => {
             wholesalePrice, minWholesaleOrder, image, Stock
         } = req.body;
 
-        const companyCode = req.user["companyCode"];
-        if (!itemName) return res.status(400).json({ error:MESSAGES.ERROR.ITEMNAME_REQUIRED });
 
-        const ItemModel = await getCompanyDB(companyCode);
+        const companyCode = req.user["companyCode"];
+        if (!itemName) return res.status(400).json({ error: MESSAGES.ERROR.ITEMNAME_REQUIRED });
+
+        const { ItemModel, GSTModel } = await getCompanyDB(companyCode);
 
         let base64Image = "";
         if (image) {
@@ -46,16 +48,30 @@ const createItem = async (req, res) => {
             Location: stock.Location
         })) : [];
 
-        const openingPayments = stockArray.map(stock => ({
-            PaymentType: "Opening Stock",
-            Type: "Opening Stock",
-            Status: "Completed",
-            Date: stock.AsOfDate || new Date(),
-            Qty: stock.OpeningQuentity,
-            Price: purchasePrice,
-            ItemName: itemName
-        }));
+        let totalOpeningTaxAmount = 0;
+        let totalOpeningValue = 0;
 
+        const openingPayments = stockArray.map(stock => {
+            const qty = Number(stock.OpeningQuentity) || 0;
+            const price = Number(purchasePrice) || 0;
+            const rate = Number(taxRate) || 0;
+            const taxAmt = (price * qty * (rate / 100));
+
+            totalOpeningTaxAmount += taxAmt;
+            totalOpeningValue += (price * qty);
+
+            return {
+                PaymentType: "Opening Stock",
+                Type: "Opening Stock",
+                Status: "Completed",
+                Date: stock.AsOfDate || new Date(),
+                Qty: qty,
+                Price: price,
+                TaxRate: rate,
+                TaxAmount: taxAmt,
+                ItemName: itemName
+            };
+        });
         const newItem = new ItemModel({
             ItemName: itemName,
             ItemCategory: category,
@@ -73,6 +89,32 @@ const createItem = async (req, res) => {
             Payment: openingPayments
         });
 
+        // 4. GST Logic - Opening Stock ને Purchase તરીકે ગણવું
+        if (totalOpeningTaxAmount > 0) {
+            const gstEntry = {
+                Type: "Opening Stock",
+                TaxAmount: totalOpeningTaxAmount,
+                Amount: totalOpeningValue,
+                Date: new Date()
+            };
+
+            // TaxName (e.g., "GST 18%") મુજબ શોધવું
+            let gst = await GSTModel.findOne({ TaxName: taxName });
+
+            if (gst) {
+                gst.Purchase.push(gstEntry);
+                gst.markModified('Purchase');
+                await gst.save();
+            } else {
+                await new GSTModel({
+                    TaxName: taxName,
+                    TaxRate: taxRate,
+                    TaxType: "GST",
+                    Purchase: [gstEntry],
+                }).save();
+            }
+        }
+
         await newItem.save();
         res.status(201).json({ message: MESSAGES.SUCCESS.ITEM_CREATED, companyCode });
     } catch (error) {
@@ -83,7 +125,7 @@ const createItem = async (req, res) => {
 const FetchItem = async (req, res) => {
     try {
         const companyCode = req.user["companyCode"];
-        const ItemModel = await getCompanyDB(companyCode);
+        const { ItemModel } = await getCompanyDB(companyCode);
         const Items = await ItemModel.find();
         res.status(200).json({ Items });
     } catch (error) {
@@ -99,7 +141,7 @@ const fetchOnlineItems = async (req, res) => {
         const allItems = [];
         for (const user of allUsers) {
             try {
-                const ItemModel = await getCompanyDB(user.companyCode);
+                const { ItemModel } = await getCompanyDB(user.companyCode);
                 const items = await ItemModel.find();
                 const mappedItems = items.map(item => ({
                     ...item.toObject(),
@@ -127,7 +169,7 @@ const updateItem = async (req, res) => {
         }
 
         const companyCode = req.user["companyCode"];
-        const ItemModel = await getCompanyDB(companyCode);
+        const { ItemModel } = await getCompanyDB(companyCode);
 
         const existingItem = await ItemModel.findById(id);
         if (!existingItem) return res.status(404).json({ error: messages.ERROR.ITEM_NOT_FOUND });
@@ -166,7 +208,7 @@ const updateItem = async (req, res) => {
         };
 
         const updatedItem = await ItemModel.findByIdAndUpdate(id, { $set: updatedFields }, { new: true });
-        res.status(200).json({ message:MESSAGES.SUCCESS.ITEM_UPDATED, updatedItem });
+        res.status(200).json({ message: MESSAGES.SUCCESS.ITEM_UPDATED, updatedItem });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -180,7 +222,7 @@ const deleteItem = async (req, res) => {
         }
 
         const companyCode = req.user["companyCode"];
-        const ItemModel = await getCompanyDB(companyCode);
+        const { ItemModel } = await getCompanyDB(companyCode);
 
         const deletedItem = await ItemModel.findByIdAndDelete(id);
         if (!deletedItem) return res.status(404).json({ error: MESSAGES.ERROR.ITEM_NOT_FOUND });
