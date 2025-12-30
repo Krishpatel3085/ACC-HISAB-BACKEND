@@ -119,7 +119,7 @@ const createPaymentIn = async (req, res) => {
 
             bank.Payment.push({
                 InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType,
                 Type: "PaymentIn",
@@ -246,7 +246,7 @@ const updatePaymentIn = async (req, res) => {
 
             cashAccount.Payment.push({
                 InvoiceNo: updatedPayment.InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType: "Cash",
                 Type: "PaymentIn",
@@ -284,7 +284,7 @@ const updatePaymentIn = async (req, res) => {
 
             bank.Payment.push({
                 InvoiceNo: updatedPayment.InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType,
                 Type: "PaymentIn",

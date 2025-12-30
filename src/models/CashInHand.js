@@ -5,7 +5,7 @@ const PaymentSchema = new mongoose.Schema(
         Total: { type: Number, default: 0 },       // Expected amount
         Balance: { type: Number, default: 0 },     // Remaining balance
         PaymentType: String,                       // e.g., Cash, UPI, etc.
-        Type: String,                              // e.g., Sale-Invoice, Payment-Out
+        Type: String,                              // e.g., Sale-Invoice, PaymentOut
         PaidAmount: { type: Number, default: 0 },  // Amount paid
         PartyName: String,
         InvoiceNo: String,

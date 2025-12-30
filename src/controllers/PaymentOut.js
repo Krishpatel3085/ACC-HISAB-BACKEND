@@ -85,7 +85,7 @@ const createPaymentOut = async (req, res) => {
 
             cashAccount.Payment.push({
                 InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType: "Cash",
                 Type: "PaymentOut",
@@ -207,7 +207,7 @@ const updatePaymentOut = async (req, res) => {
                 Total: total,
                 Balance: balance,
                 PaymentType,
-                Type: "Payment-Out",
+                Type: "PaymentOut",
                 PaidAmount: total,
                 PartyName,
                 Status: status,
@@ -251,10 +251,10 @@ const updatePaymentOut = async (req, res) => {
 
             cashAccount.Payment.push({
                 InvoiceNo: updatedPayment.InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType: "Cash",
-                Type: "Payment-Out",
+                Type: "PaymentOut",
                 PaidAmount: total,
                 PartyName,
                 Date
@@ -275,7 +275,7 @@ const updatePaymentOut = async (req, res) => {
                 InvoiceNo: updatedPayment.InvoiceNo,
                 Total: total,
                 PaymentType: "Cheque",
-                Type: "Payment-Out",
+                Type: "PaymentOut",
                 PartyName,
                 ChequeNumber,
                 Date
@@ -289,10 +289,10 @@ const updatePaymentOut = async (req, res) => {
 
             bank.Payment.push({
                 InvoiceNo: updatedPayment.InvoiceNo,
-                Total: 0,
+                Total: total,
                 Balance: balance,
                 PaymentType,
-                Type: "Payment-Out",
+                Type: "PaymentOut",
                 PaidAmount: total,
                 PartyName,
                 Date
